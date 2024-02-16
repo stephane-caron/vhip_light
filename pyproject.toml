@@ -1,0 +1,68 @@
+[build-system]
+requires = ["flit_core >=2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "vhip_balancers"
+readme = "README.md"
+authors = [
+    {name = "Stéphane Caron", email = "stephane.caron@normalesup.org"},
+]
+maintainers = [
+    {name = "Stéphane Caron", email = "stephane.caron@normalesup.org"},
+]
+dynamic = ['version', 'description']
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: Robot Framework :: Library",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "loop-rate-limiters >=0.1.0",
+    "numpy >=1.19.0",
+    "pin >=2.6.3",
+    "qpsolvers >=2.5.0",
+    "quadprog >=0.1.11",
+]
+keywords = ["inverse", "kinematics", "pinocchio"]
+
+[project.urls]
+Documentation = "https://stephane-caron.github.io/vhip_balancers/"
+Source = "https://github.com/stephane-caron/vhip_balancers"
+Tracker = "https://github.com/stephane-caron/vhip_balancers/issues"
+Changelog = "https://github.com/stephane-caron/vhip_balancers/blob/main/CHANGELOG.md"
+
+[tool.black]
+line-length = 79
+
+[tool.flit.module]
+name = "vhip_balancers"
+
+[tool.ruff]
+line-length = 79
+select = [
+    # pyflakes
+    "F",
+    # pycodestyle
+    "E",
+    "W",
+    # isort
+    "I001",
+    # pydocstyle
+    "D"
+]
+ignore = [
+    "D401",  # good for methods but not for class docstrings
+    "D405",  # British-style section names are also "proper"!
+]
+
+[tool.ruff.pydocstyle]
+convention = "google"
