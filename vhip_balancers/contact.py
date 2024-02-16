@@ -30,6 +30,11 @@ class Contact:
         return np.array([0.0, 0.0, 1.0])
 
     @property
+    def n(self) -> NDArray[float]:
+        """Normal vector in the inertial frame."""
+        return self.normal
+
+    @property
     def R(self) -> NDArray[float]:
         """Rotation from the contact frame to the inertial frame."""
         return np.eye(3)

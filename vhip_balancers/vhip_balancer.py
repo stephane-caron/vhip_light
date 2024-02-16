@@ -44,7 +44,9 @@ class VHIPBalancer(Balancer):
             :2
         ]
         self.kp = kp
+        self.max_dcm_height = max_dcm_height
         self.max_force = max_force
+        self.min_dcm_height = min_dcm_height
         self.min_force = min_force
         self.r_contact_max = np.array(self.contact.shape)
         self.ref_cop_contact = r_d_contact

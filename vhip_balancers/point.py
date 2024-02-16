@@ -15,6 +15,12 @@ class Point:
     p: NDArray[float]
     pd: NDArray[float]
 
+    def set_pos(self, p: NDArray[float]) -> None:
+        self.p = p
+
+    def set_vel(self, pd: NDArray[float]) -> None:
+        self.pd = pd
+
     @property
     def x(self):
         return self.p[0]

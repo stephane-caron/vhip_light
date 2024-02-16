@@ -13,7 +13,7 @@ first one (baseline) is based on proportional feedback of the 3D DCM
 
 from typing import List
 
-import IPython
+import matplotlib.pylab as plt
 import numpy as np
 
 from vhip_balancers import (
@@ -32,19 +32,17 @@ MAX_DCM_HEIGHT = 1.0  # [m]
 MAX_FORCE = 1000.0  # [N]
 MIN_DCM_HEIGHT = 0.5  # [m]
 MIN_FORCE = 1.0  # [N]
+TIMESTEP = 0.03  # [s]
 
 assert FEEDBACK_GAIN > 1.0, "DCM feedback gain needs to be greater than one"
 
 
 if __name__ == "__main__":
-    dt = 0.03  # [s]
-
     contact = Contact(shape=(0.1, 0.05), pos=[0.0, 0.0, 0.0])
     init_pos = np.array([0.0, 0.0, 0.8])
     init_vel = np.zeros(3)
     pendulums = []
     balancers = []
-    kp = 3.0
 
     pendulums.append(InvertedPendulum(init_pos, init_vel, contact, mass=MASS))
     vhip_balancer = VHIPQPBalancer(
@@ -64,6 +62,7 @@ if __name__ == "__main__":
     pusher = Pusher(pendulums)
     plotter = Plotter(
         balancers,
+        contact=contact,
         ref_omega=vrp_balancer.ref_omega,
         ref_lambda=vrp_balancer.ref_lambda,
         ref_dcm=vrp_balancer.ref_dcm,
@@ -79,7 +78,7 @@ if __name__ == "__main__":
     def step(nb_steps: int = 1) -> None:
         for step in range(nb_steps):
             for process in processes:
-                process.step(dt)
+                process.step(TIMESTEP)
 
     def push_three_times():
         """Apply three pushes of increasing magnitude to the CoM.
@@ -104,8 +103,7 @@ if __name__ == "__main__":
     step(42)  # go to reference
     impulse = np.array([0.0, -0.09, 0.0])
     push_three_times()  # scenario for Fig. 1 of the paper
-    reset()
 
-    if IPython.get_ipython() is None:  # give the user a prompt
-        IPython.embed()
-    IPython.get_ipython().magic("pylab")  # for plots
+    plotter.plot(TIMESTEP)
+    plt.show(block=True)
+    reset()
