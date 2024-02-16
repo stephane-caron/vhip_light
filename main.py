@@ -15,8 +15,6 @@ import IPython
 import matplotlib
 import matplotlib.pylab as plt
 import numpy as np
-from numpy import array, dot, eye, hstack, sqrt, vstack, zeros
-from qpsolvers import solve_qp
 
 from vhip_balancers import (
     Contact,
@@ -55,7 +53,6 @@ class Pusher:
     def __init__(self, pendulums, gain=0.1):
         super(Pusher, self).__init__()
         self.gain = gain
-        self.mask = array([1.0, 1.0, 1.0])
         self.nb_ticks = 0
         self.pendulums = pendulums
         self.started = False
@@ -77,13 +74,11 @@ class Pusher:
         if self.started and self.nb_ticks % one_sec == 0:
             self.push()
 
-    def push(self, dv=None, gain=None, mask=None):
+    def push(self, dv=None, gain=None):
         if gain is None:
             gain = self.gain
         if dv is None:
             dv = 2.0 * np.random.random(3) - 1.0
-            if self.mask is not None:
-                dv *= self.mask
             dv *= gain / np.linalg.norm(dv)
             print("Pusher: dv = {}".format(repr(dv)))
         for pendulum in self.pendulums:
@@ -221,43 +216,9 @@ if __name__ == "__main__":
         sim.step()
 
     sim.step(42)  # go to reference
-    impulse = array([0.0, -0.09, 0.0])
+    impulse = np.array([0.0, -0.09, 0.0])
     # push_three_times()  # scenario for Fig. 1 of the paper
-    # record_video()  # video for v1 of the paper
     reset()
-
-    print(
-        """
-
-Variable-Height Inverted Pendulum Stabilization
-===============================================
-
-Ready to go! You can access all state variables via this IPython shell.
-Here is the list of global objects. Use <TAB> to see what's inside.
-
-    pendulums -- LIP and VHIP inverted pendulum states
-    balancers -- their respective balance feedback controllers
-    pusher -- applies external impulse to both pendulums at regular intervals
-    plotter -- logs plot data
-
-Call ``plotter.plot()`` to draw a LIP/VHIP comparison plot (Fig. 2 of the
-manuscript).
-
-You can pause/resume processes or the whole simulation by:
-
-    sim.start() -- start/resume simulation
-    sim.step(100) -- run simulation in current thread for 100 steps
-    sim.stop() -- stop/pause simulation
-    pusher.push([0., 0.12, 0.]) -- apply same impulse to both pendulums
-    reset() -- reset both inverted pendulums to the origin
-
-If a pendulum diverges, both pendulums will eventually disappear from the GUI.
-          Call ``reset()`` in this case.
-
-Enjoy :)
-
-"""
-    )
 
     if IPython.get_ipython() is None:  # give the user a prompt
         IPython.embed()
