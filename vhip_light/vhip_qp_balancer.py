@@ -5,10 +5,11 @@
 # Copyright 2024 Inria
 
 import numpy as np
+from qpsolvers import SolverNotFound, available_solvers, solve_qp
 
+from .inverted_pendulum import InvertedPendulum
 from .vhip_balancer import VHIPBalancer
 
-from qpsolvers import solve_qp
 
 class VHIPQPBalancer(VHIPBalancer):
     """Proportional feedback of the 4D DCM of the VHIP.
@@ -24,6 +25,30 @@ class VHIPQPBalancer(VHIPBalancer):
         step would not have been necessary if we had a modeling language for
         convex optimization directly in C++.)
     """
+
+    def __init__(
+        self,
+        pendulum: InvertedPendulum,
+        kp: float,
+        max_dcm_height: float,
+        max_force: float,
+        min_dcm_height: float,
+        min_force: float,
+        solver: str = "quadprog",
+    ):
+        super().__init__(
+            pendulum=pendulum,
+            kp=kp,
+            max_dcm_height=max_dcm_height,
+            max_force=max_force,
+            min_dcm_height=min_dcm_height,
+            min_force=min_force,
+        )
+        if solver not in available_solvers:
+            raise SolverNotFound(
+                f"solver '{solver}' is not in {available_solvers=}"
+            )
+        self.solver = solver
 
     def compute_compensation(self, dt: float):
         """Compute CoP and normalized leg stiffness compensation."""
@@ -137,7 +162,8 @@ class VHIPQPBalancer(VHIPBalancer):
         P = np.diag([1e-6] * 7 + [1.0, 1.0, 1e-3])
         q = np.zeros(10)
 
-        Delta_x = solve_qp(P, q, G, h, A, b, solver="quadprog")
+        Delta_x = solve_qp(P, q, G, h, A, b, solver=self.solver)
+        print(f"{Delta_x.shape=}")
         Delta_omega_opt = Delta_x[3]
         Delta_r_opt = Delta_x[4:6]
         Delta_lambda_opt = Delta_x[6]
