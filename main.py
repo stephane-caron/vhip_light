@@ -32,9 +32,9 @@ MIN_DCM_HEIGHT = 0.5  # [m]
 MAX_FORCE = 1000.0  # [N]
 MIN_FORCE = 1.0  # [N]
 
-K_P = 3.0  # proportional DCM feedback gain
+FEEDBACK_GAIN = 3.0  # proportional DCM feedback gain
 
-assert K_P > 1.0, "DCM feedback gain needs to be greater than one"
+assert FEEDBACK_GAIN > 1.0, "DCM feedback gain needs to be greater than one"
 
 
 class Pusher:
@@ -156,48 +156,35 @@ class Plotter:
             plt.grid(True)
 
 
-def step(n_steps: int) -> None:
-    for process in sim:
-        process.step(dt)
-
-
-def push_three_times():
-    """Apply three pushes of increasing magnitude to the CoM.
-
-    Note:
-    ----
-    This is the function used to generate Fig. 1 in the manuscript
-    <https://hal.archives-ouvertes.fr/hal-02289919v1/document>.
-    """
-    step(10)
-    pusher.push([0.0, 0.08, 0.0])
-    step(40)
-    pusher.push([0.0, 0.12, 0.0])
-    step(50)
-    pusher.push([0.0, 0.18, 0.0])
-    step(100)
-
-
 if __name__ == "__main__":
     dt = 0.03  # [s]
 
-    contact = Contact((0.1, 0.05), pos=[0.0, 0.0, 0.0])
+    contact = Contact(shape=(0.1, 0.05), pos=[0.0, 0.0, 0.0])
     init_pos = np.array([0.0, 0.0, 0.8])
     init_vel = np.zeros(3)
     pendulums = []
     balancers = []
     kp = 3.0
 
-    pendulums.append(InvertedPendulum(init_pos, init_vel, contact))
-    vhip_balancer = VHIPQPBalancer(pendulums[-1])
+    pendulums.append(InvertedPendulum(init_pos, init_vel, contact, mass=MASS))
+    vhip_balancer = VHIPQPBalancer(
+        pendulums[-1],
+        kp=FEEDBACK_GAIN,
+        max_force=MAX_FORCE,
+        min_force=MIN_FORCE,
+        max_dcm_height=MAX_DCM_HEIGHT,
+        min_dcm_height=MIN_DCM_HEIGHT,
+    )
     balancers.append(vhip_balancer)
 
-    pendulums.append(InvertedPendulum(init_pos, init_vel, contact))
-    vrp_balancer = VRPBalancer(pendulums[-1])
+    pendulums.append(InvertedPendulum(init_pos, init_vel, contact, mass=MASS))
+    vrp_balancer = VRPBalancer(pendulums[-1], kp=FEEDBACK_GAIN)
     balancers.append(vrp_balancer)
 
-    pendulums.append(InvertedPendulum(init_pos, init_vel, contact))
-    bonus_balancer = PolePlacementBalancer(pendulums[-1], k_z=100)
+    pendulums.append(InvertedPendulum(init_pos, init_vel, contact, mass=MASS))
+    bonus_balancer = PolePlacementBalancer(
+        pendulums[-1], k_z=100, kp=FEEDBACK_GAIN
+    )
     balancers.append(bonus_balancer)
 
     pusher = Pusher(pendulums)
@@ -210,14 +197,34 @@ if __name__ == "__main__":
     sim.append(plotter)  # before pusher
     sim.append(pusher)
 
+    def step(nb_steps: int = 1) -> None:
+        for step in range(nb_steps):
+            for process in sim:
+                process.step(dt)
+
+    def push_three_times():
+        """Apply three pushes of increasing magnitude to the CoM.
+
+        Note:
+            This is the function used to generate Fig. 1 in the manuscript
+            <https://hal.archives-ouvertes.fr/hal-02289919v1/document>.
+        """
+        step(10)
+        pusher.push([0.0, 0.08, 0.0])
+        step(40)
+        pusher.push([0.0, 0.12, 0.0])
+        step(50)
+        pusher.push([0.0, 0.18, 0.0])
+        step(100)
+
     def reset():
         for stab in balancers:
             stab.reset_pendulum()
-        sim.step()
+        step()
 
-    sim.step(42)  # go to reference
+    step(42)  # go to reference
     impulse = np.array([0.0, -0.09, 0.0])
-    # push_three_times()  # scenario for Fig. 1 of the paper
+    push_three_times()  # scenario for Fig. 1 of the paper
     reset()
 
     if IPython.get_ipython() is None:  # give the user a prompt

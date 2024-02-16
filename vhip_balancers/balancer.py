@@ -51,9 +51,9 @@ class Balancer:
         self.pendulum.set_cop(self.ref_cop)
         self.pendulum.set_lambda(self.ref_lambda)
 
-    def step(self):
+    def step(self, dt: float) -> None:
         """Set inverted pendulum CoP and stiffness inputs."""
-        Delta_r, Delta_lambda = self.compute_compensation()
+        Delta_r, Delta_lambda = self.compute_compensation(dt)
         cop = self.ref_cop + np.dot(self.contact.R[:3, :2], Delta_r)
         lambda_ = self.ref_lambda + Delta_lambda
         self.pendulum.set_cop(cop)

@@ -8,6 +8,7 @@ import numpy as np
 
 from .vhip_balancer import VHIPBalancer
 
+from qpsolvers import solve_qp
 
 class VHIPQPBalancer(VHIPBalancer):
     """Proportional feedback of the 4D DCM of the VHIP.
@@ -125,13 +126,13 @@ class VHIPQPBalancer(VHIPBalancer):
         )
         h_xi_next = np.array(
             [
-                MAX_DCM_HEIGHT - self.ref_dcm[2],
-                self.ref_dcm[2] - MIN_DCM_HEIGHT,
+                self.max_dcm_height - self.ref_dcm[2],
+                self.ref_dcm[2] - self.min_dcm_height,
             ]
         )
 
-        G = vstack([G_cop, G_lambda, G_omega, G_xi_next])
-        h = hstack([h_cop, h_lambda, h_omega, h_xi_next])
+        G = np.vstack([G_cop, G_lambda, G_omega, G_xi_next])
+        h = np.hstack([h_cop, h_lambda, h_omega, h_xi_next])
 
         P = np.diag([1e-6] * 7 + [1.0, 1.0, 1e-3])
         q = np.zeros(10)

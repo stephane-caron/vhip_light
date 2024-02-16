@@ -38,7 +38,7 @@ class VRPBalancer(Balancer):
         self.ref_vrp = self.ref_com
         self.kp = kp
 
-    def compute_compensation(self):
+    def compute_compensation(self, dt: float):
         """Compute CoP and normalized leg stiffness compensation."""
         omega = self.omega
         com = self.pendulum.com.p

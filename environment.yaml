@@ -5,4 +5,5 @@ dependencies:
     - cvxpy
     - ipython
     - matplotlib
+    - qpsolvers
     - scipy

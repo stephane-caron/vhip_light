@@ -47,8 +47,9 @@ class PolePlacementBalancer(Balancer):
     we came to the derivation of the VHIPQPBalancer.
     """
 
-    def __init__(self, pendulum, k_z):
+    def __init__(self, pendulum, k_z, kp:float):
         super(PolePlacementBalancer, self).__init__(pendulum)
+
         ref_dcm = self.ref_comd + self.ref_omega * self.ref_com
         # ref_cop = np.zeros(3)  # assumption of this stabilizer
         assert np.linalg.norm(self.contact.R - np.eye(3)) < 1e-5
@@ -71,6 +72,7 @@ class PolePlacementBalancer(Balancer):
         self.A = A
         self.B = B
         self.K = None  # call set_gains or set_poles
+        self.kp = kp
         self.ref_dcm = ref_dcm
         #
         self.set_critical_gains(k_z)

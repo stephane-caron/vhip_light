@@ -14,3 +14,15 @@ from numpy.typing import NDArray
 class Point:
     p: NDArray[float]
     pd: NDArray[float]
+
+    @property
+    def x(self):
+        return self.p[0]
+
+    @property
+    def y(self):
+        return self.p[1]
+
+    @property
+    def z(self):
+        return self.p[2]

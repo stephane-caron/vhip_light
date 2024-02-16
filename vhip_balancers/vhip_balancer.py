@@ -33,6 +33,7 @@ class VHIPBalancer(Balancer):
     def __init__(
         self,
         pendulum: InvertedPendulum,
+        kp: float,
         max_dcm_height: float,
         max_force: float,
         min_dcm_height: float,
@@ -42,14 +43,15 @@ class VHIPBalancer(Balancer):
         r_d_contact = np.dot(self.contact.R.T, self.ref_cop - self.contact.p)[
             :2
         ]
+        self.kp = kp
+        self.max_force = max_force
+        self.min_force = min_force
         self.r_contact_max = np.array(self.contact.shape)
         self.ref_cop_contact = r_d_contact
         self.ref_dcm = self.ref_com
         self.ref_vrp = self.ref_com
-        self.max_force = max_force
-        self.min_force = min_force
 
-    def compute_compensation(self, dt):
+    def compute_compensation(self, dt: float):
         """Compute CoP and normalized leg stiffness compensation."""
         # Measurements
         Delta_com = self.pendulum.com.p - self.ref_com
