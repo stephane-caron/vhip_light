@@ -88,16 +88,13 @@ if __name__ == "__main__":
             <https://hal.archives-ouvertes.fr/hal-02289919v1/document>.
         """
         step(10)
-
-        print("\nFirst push: dv_y=0.08 m/s")
+        # print("\nFirst push: dv_y=0.08 m/s")
         pusher.push([0.0, 0.08, 0.0])
         step(40)
-
-        print("\nSecond push: dv_y=0.12 m/s")
+        # print("\nSecond push: dv_y=0.12 m/s")
         pusher.push([0.0, 0.12, 0.0])
         step(50)
-
-        print("\nThird push: dv_y=0.18 m/s")
+        # print("\nThird push: dv_y=0.18 m/s")
         pusher.push([0.0, 0.18, 0.0])
         step(100)
 

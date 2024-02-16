@@ -4,8 +4,6 @@
 # SPDX-License-Identifier: GPL-3.0
 # Copyright 2024 Inria
 
-import numpy as np
-
 from .process import Process
 
 
@@ -35,13 +33,9 @@ class Pusher(Process):
     def stop(self):
         self.started = False
 
-    def push(self, dv=None, gain=None):
+    def push(self, dv, gain=None):
         if gain is None:
             gain = self.gain
-        if dv is None:
-            dv = 2.0 * np.random.random(3) - 1.0
-            dv *= gain / np.linalg.norm(dv)
-            print("Pusher: dv = {}".format(repr(dv)))
         for pendulum in self.pendulums:
             comd = pendulum.com.pd
             pendulum.com.set_vel(comd + dv)
