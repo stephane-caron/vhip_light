@@ -3,7 +3,7 @@ requires = ["flit_core >=2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "vhip_balancers"
+name = "vhip_light"
 readme = "README.md"
 authors = [
     {name = "Stéphane Caron", email = "stephane.caron@normalesup.org"},
@@ -35,16 +35,16 @@ dependencies = [
 keywords = ["inverse", "kinematics", "pinocchio"]
 
 [project.urls]
-Documentation = "https://stephane-caron.github.io/vhip_balancers/"
-Source = "https://github.com/stephane-caron/vhip_balancers"
-Tracker = "https://github.com/stephane-caron/vhip_balancers/issues"
-Changelog = "https://github.com/stephane-caron/vhip_balancers/blob/main/CHANGELOG.md"
+Documentation = "https://stephane-caron.github.io/vhip_light/"
+Source = "https://github.com/stephane-caron/vhip_light"
+Tracker = "https://github.com/stephane-caron/vhip_light/issues"
+Changelog = "https://github.com/stephane-caron/vhip_light/blob/main/CHANGELOG.md"
 
 [tool.black]
 line-length = 79
 
 [tool.flit.module]
-name = "vhip_balancers"
+name = "vhip_light"
 
 [tool.ruff]
 line-length = 79

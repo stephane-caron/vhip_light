@@ -4,11 +4,40 @@
 # SPDX-License-Identifier: GPL-3.0
 # Copyright 2024 Inria
 
+from dataclasses import dataclass
+
 import numpy as np
+from numpy.typing import NDArray
 from qpsolvers import SolverNotFound, available_solvers, solve_qp
 
 from .inverted_pendulum import InvertedPendulum
 from .vhip_balancer import VHIPBalancer
+
+
+@dataclass
+class VHIPQPResult:
+
+    Delta_x: NDArray[float]
+
+    @property
+    def Delta_xi(self) -> NDArray[float]:
+        return self.Delta_x[0:3]
+
+    @property
+    def Delta_omega(self) -> float:
+        return self.Delta_x[3]
+
+    @property
+    def Delta_z(self) -> NDArray[float]:
+        return self.Delta_x[4:6]
+
+    @property
+    def Delta_lambda(self) -> float:
+        return self.Delta_x[6]
+
+    @property
+    def Delta_sigma(self) -> NDArray[float]:
+        return self.Delta_x[7:10]
 
 
 class VHIPQPBalancer(VHIPBalancer):
