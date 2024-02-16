@@ -192,7 +192,8 @@ class VHIPQPBalancer(VHIPBalancer):
         q = np.zeros(10)
 
         Delta_x = solve_qp(P, q, G, h, A, b, solver=self.solver)
-        print(f"{Delta_x.shape=}")
+        self.result = VHIPQPResult(Delta_x)  # saved for later
+
         Delta_omega_opt = Delta_x[3]
         Delta_r_opt = Delta_x[4:6]
         Delta_lambda_opt = Delta_x[6]
