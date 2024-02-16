@@ -1,6 +1,8 @@
 # VHIP balancing in Python
 
-Python code for [Biped Stabilization by Linear Feedback of the Variable-Height Inverted Pendulum Model](https://arxiv.org/abs/1909.07732). It unrolls VHIP trajectories with different balance controllers and reproduces plots as in the paper:
+Python code for [Biped Stabilization by Linear Feedback of the Variable-Height Inverted Pendulum Model](https://arxiv.org/abs/1909.07732).
+
+The main script unrolls VHIP trajectories with different balance controllers and reproduces plots as in the paper:
 
 ![image](https://github.com/stephane-caron/vhip_light/assets/1189580/8a12ac28-3402-4b7a-92ea-9e46e18849b3)
 
