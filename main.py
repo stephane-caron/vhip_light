@@ -5,31 +5,26 @@
 # Copyright 2016-2019 CNRS-UM LIRMM
 # Copyright 2024 Inria
 
-"""This example compares two stabilizers for the inverted pendulum model. The
+"""This example compares two balancers for the inverted pendulum model. The
 first one (baseline) is based on proportional feedback of the 3D DCM
 [Englsberger15]_. The second one (proposed) performs proportional feedback of a
 4D DCM of the same model [Caron20]_.
 """
 
-import sys
-from warnings import warn
-
 import IPython
 import matplotlib
 import matplotlib.pylab as plt
 import numpy as np
-import scipy.signal
-from numpy.typing import NDArray
-
-from vhip_balancers import InvertedPendulum, Point
-
-try:
-    import cvxpy
-except ImportError:
-    raise ImportError("This example requires CVXPY, install it e.g. via pip")
-
 from numpy import array, dot, eye, hstack, sqrt, vstack, zeros
 from qpsolvers import solve_qp
+
+from vhip_balancers import (
+    Contact,
+    InvertedPendulum,
+    PolePlacementBalancer,
+    VHIPQPBalancer,
+    VRPBalancer,
+)
 
 MASS = 38.0  # [kg]
 
@@ -42,367 +37,6 @@ MIN_FORCE = 1.0  # [N]
 K_P = 3.0  # proportional DCM feedback gain
 
 assert K_P > 1.0, "DCM feedback gain needs to be greater than one"
-
-
-class VHIPStabilizer(Stabilizer):
-    """Proportional feedback of the 4D DCM of the VHIP.
-
-    Parameters
-        pendulum: Inverted pendulum to stabilize.
-
-    Notes:
-        This implementation uses CVXPY <https://www.cvxpy.org/>. Using this
-        modeling language here allowed us to try various formulations of the
-        controller before converging on this one. We can only praise the
-        agility of this approach, as opposed to e.g. writing QP matrices
-        directly.
-
-        See "Biped Stabilization by Linear Feedback of the Variable-Height
-        Inverted Pendulum Model" (Caron, 2019) for detail on the controller
-        itself.
-    """
-
-    def __init__(self, pendulum):
-        super(VHIPStabilizer, self).__init__(pendulum)
-        r_d_contact = dot(self.contact.R.T, self.ref_cop - self.contact.p)[:2]
-        self.r_contact_max = array(self.contact.shape)
-        self.ref_cop_contact = r_d_contact
-        self.ref_dcm = self.ref_com
-        self.ref_vrp = self.ref_com
-
-    def compute_compensation(self):
-        """Compute CoP and normalized leg stiffness compensation."""
-        # Measurements
-        Delta_com = self.pendulum.com.p - self.ref_com
-        Delta_comd = self.pendulum.com.pd - self.ref_comd
-        height = dot(self.contact.normal, self.pendulum.com.p - self.contact.p)
-        lambda_d = self.ref_lambda
-        measured_comd = self.pendulum.com.pd
-        nu_d = self.ref_vrp
-        omega_d = self.ref_omega
-        r_d_contact = self.ref_cop_contact
-        xi_d = self.ref_dcm
-
-        # Force limits
-        lambda_max = MAX_FORCE / (MASS * height)
-        lambda_min = MIN_FORCE / (MASS * height)
-        omega_max = sqrt(lambda_max)
-        omega_min = sqrt(lambda_min)
-
-        # Optimization variables
-        Delta_lambda = cvxpy.Variable(1)
-        Delta_nu = cvxpy.Variable(3)
-        Delta_omega = cvxpy.Variable(1)
-        Delta_r = cvxpy.Variable(2)
-        u = cvxpy.Variable(3)
-
-        # Linearized variation dynamics
-        Delta_xi = (
-            Delta_com
-            + Delta_comd / omega_d
-            - measured_comd / (omega_d**2) * Delta_omega
-        )
-        Delta_omegad = 2 * omega_d * Delta_omega - Delta_lambda
-        Delta_r_world = contact.R[:3, :2] * Delta_r
-        r_contact = r_d_contact + Delta_r
-        lambda_ = lambda_d + Delta_lambda
-        omega = omega_d + Delta_omega
-
-        # Pole placement
-        Delta_xid = (
-            Delta_lambda * (xi_d - nu_d)
-            + lambda_d * (Delta_xi - Delta_nu)
-            + -Delta_omega * lambda_d * (xi_d - nu_d) / omega_d
-        ) / omega_d
-
-        # Kinematic DCM height constraint
-        xi_z = self.ref_dcm[2] + Delta_xi[2] + 1.5 * dt * Delta_xid[2]
-
-        # Cost function
-        costs = []
-        sq_costs = [(1.0, u[0]), (1.0, u[1]), (1e-3, u[2])]
-        for weight, expr in sq_costs:
-            costs.append((weight, cvxpy.sum_squares(expr)))
-        cost = sum(weight * expr for (weight, expr) in costs)
-
-        # Quadratic program
-        prob = cvxpy.Problem(
-            objective=cvxpy.Minimize(cost),
-            constraints=[
-                Delta_xid == lambda_d / omega_d * ((1 - K_P) * Delta_xi + u),
-                Delta_omegad == omega_d * (1 - K_P) * Delta_omega,
-                Delta_nu
-                == Delta_r_world + GRAVITY * Delta_lambda / lambda_d**2,
-                cvxpy.abs(r_contact) <= self.r_contact_max,
-                lambda_ <= lambda_max,
-                lambda_ >= lambda_min,
-                xi_z <= MAX_DCM_HEIGHT,
-                xi_z >= MIN_DCM_HEIGHT,
-                omega <= omega_max,
-                omega >= omega_min,
-            ],
-        )
-        prob.solve()
-
-        # Read outputs from solution
-        Delta_lambda_opt = Delta_lambda.value
-        Delta_r_opt = array(Delta_r.value).reshape((2,))
-        self.omega = omega_d + Delta_omega.value
-        self.dcm = self.pendulum.com.p + self.pendulum.com.pd / self.omega
-        return (Delta_r_opt, Delta_lambda_opt)
-
-
-class VHIPQPStabilizer(VHIPStabilizer):
-    """Proportional feedback of the 4D DCM of the VHIP.
-
-    Args:
-        pendulum: Inverted pendulum to stabilize.
-
-    Notes:
-        This implementation transcripts QP matrices from
-        :class:`VHIPStabilizer`. We checked that the two produce the same
-        outputs before switching to C++ in
-        <https://github.com/stephane-caron/vhip_walking_controller/>. (This
-        step would not have been necessary if we had a modeling language for
-        convex optimization directly in C++.)
-    """
-
-    def compute_compensation(self):
-        """Compute CoP and normalized leg stiffness compensation."""
-        Delta_com = self.pendulum.com.p - self.ref_com
-        Delta_comd = self.pendulum.com.pd - self.ref_comd
-        measured_comd = self.pendulum.com.pd
-        lambda_d = self.ref_lambda
-        nu_d = self.ref_vrp
-        omega_d = self.ref_omega
-        r_d = self.ref_cop
-        r_d_contact = self.ref_cop_contact
-        xi_d = self.ref_dcm
-        height = dot(self.contact.normal, self.pendulum.com.p - self.contact.p)
-        lambda_max = MAX_FORCE / (MASS * height)
-        lambda_min = MIN_FORCE / (MASS * height)
-        omega_max = sqrt(lambda_max)
-        omega_min = sqrt(lambda_min)
-
-        A = vstack(
-            [
-                hstack(
-                    [
-                        -K_P * eye(3),
-                        (xi_d - nu_d).reshape((3, 1)) / omega_d,
-                        self.contact.R[:3, :2],
-                        (r_d - xi_d).reshape((3, 1)) / lambda_d,
-                        eye(3),
-                    ]
-                ),
-                hstack(
-                    [
-                        eye(3),
-                        measured_comd.reshape((3, 1)) / omega_d**2,
-                        zeros((3, 2)),
-                        zeros((3, 1)),
-                        zeros((3, 3)),
-                    ]
-                ),
-                hstack(
-                    [
-                        zeros((1, 3)),
-                        omega_d * (1 + K_P) * eye(1),
-                        zeros((1, 2)),
-                        -1 * eye(1),
-                        zeros((1, 3)),
-                    ]
-                ),
-            ]
-        )
-        b = hstack([zeros(3), Delta_com + Delta_comd / omega_d, zeros(1)])
-
-        G_cop = array(
-            [
-                [0.0, 0.0, 0.0, 0.0, +1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0, +1.0, 0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0],
-            ]
-        )
-        h_cop = array(
-            [
-                self.contact.shape[0] - r_d_contact[0],
-                self.contact.shape[0] + r_d_contact[0],
-                self.contact.shape[1] - r_d_contact[1],
-                self.contact.shape[1] + r_d_contact[1],
-            ]
-        )
-
-        G_lambda = array(
-            [
-                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, +1.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
-            ]
-        )
-        h_lambda = array([lambda_max - lambda_d, lambda_d - lambda_min])
-
-        G_omega = array(
-            [
-                [0.0, 0.0, 0.0, +1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            ]
-        )
-        h_omega = array([omega_max - omega_d, omega_d - omega_min])
-
-        g_sigma = 1.5 * lambda_d * dt / omega_d
-        g_xi = 1 + g_sigma * (1 - K_P)
-        G_xi_next = array(
-            [
-                [0.0, 0.0, +g_xi, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, +g_sigma],
-                [0.0, 0.0, -g_xi, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -g_sigma],
-            ]
-        )
-        h_xi_next = array(
-            [
-                MAX_DCM_HEIGHT - self.ref_dcm[2],
-                self.ref_dcm[2] - MIN_DCM_HEIGHT,
-            ]
-        )
-
-        G = vstack([G_cop, G_lambda, G_omega, G_xi_next])
-        h = hstack([h_cop, h_lambda, h_omega, h_xi_next])
-
-        P = np.diag([1e-6] * 7 + [1.0, 1.0, 1e-3])
-        q = np.zeros(10)
-
-        Delta_x = solve_qp(P, q, G, h, A, b, solver="quadprog")
-        Delta_omega_opt = Delta_x[3]
-        Delta_r_opt = Delta_x[4:6]
-        Delta_lambda_opt = Delta_x[6]
-        self.omega = omega_d + Delta_omega_opt
-        self.dcm = self.pendulum.com.p + self.pendulum.com.pd / self.omega
-        return (Delta_r_opt, Delta_lambda_opt)
-
-
-class BonusPolePlacementStabilizer(Stabilizer):
-    """This is a "bonus" stabilizer, not reported in the paper, that was an
-    intermediate step in our derivation of the VHIPQPStabilizer.
-
-    Args:
-        pendulum: Inverted pendulum to stabilize.
-        k_z: Feedback gain between DCM altitude and normalized leg stiffness
-            input.
-
-    Notes:
-        This stabilizer also performs pole placement on a 4D DCM (using a
-        velocity rather than position DCM though), but contrary to
-        VHIPQPStabilizer it doesn't force the closed-loop matrix to be
-        diagonal. We started out exploring this stabilizer first.
-
-        The first thing to observe by direct pole placement is that the gain
-        matrix has essentially four non-zero gains in general. You can try out
-        the :func:`set_poles` function to verify this.
-
-        The closed-loop system with four gains has structure: in the horizontal
-        plane it is equivalent to the VRPStabilizer, and the normalized leg
-        stiffness lambda depends on both the vertical DCM and the natural
-        frequency omega. We observed that this system performs identically to
-        the previous one in the horizontal plane, and always worse than the
-        previous one vertically.
-
-        However, raising the k_z (vertical DCM to lambda) gain to large values,
-        we noticed that the vertical tracking of this stabilizer converged to
-        that of the VRPStabilizer. In the limit where k_z goes to infinity, the
-        system slides on the constraint given by Equation (21) in the paper.
-        This is how
-    we came to the derivation of the VHIPQPStabilizer.
-    """
-
-    def __init__(self, pendulum, k_z):
-        super(BonusPolePlacementStabilizer, self).__init__(pendulum)
-        ref_dcm = self.ref_comd + self.ref_omega * self.ref_com
-        # ref_cop = np.zeros(3)  # assumption of this stabilizer
-        assert np.linalg.norm(self.contact.R - np.eye(3)) < 1e-5
-        A = array(
-            [
-                [self.ref_omega, 0.0, 0.0, ref_dcm[0]],
-                [0.0, self.ref_omega, 0.0, ref_dcm[1]],
-                [0.0, 0.0, self.ref_omega, ref_dcm[2]],
-                [0.0, 0.0, 0.0, 2.0 * self.ref_omega],
-            ]
-        )
-        B = -array(
-            [
-                [self.ref_lambda, 0.0, self.ref_cop[0]],
-                [0.0, self.ref_lambda, self.ref_cop[1]],
-                [0.0, 0.0, self.ref_cop[2]],
-                [0.0, 0.0, 1.0],
-            ]
-        )
-        self.A = A
-        self.B = B
-        self.K = None  # call set_gains or set_poles
-        self.ref_dcm = ref_dcm
-        #
-        self.set_critical_gains(k_z)
-
-    def set_poles(self, poles: NDArray[float]):
-        """Place poles using SciPy's implementation of Kautsky et al.
-
-        Args:
-            poles: Desired poles of the closed-loop system.
-        """
-        bunch = scipy.signal.place_poles(self.A, self.B, poles)
-        self.K = -bunch.gain_matrix  # place_poles assumes A - B * K
-
-    def set_gains(self, gains):
-        """Set gains from 4D DCM error to 3D input ``[zmp_x, zmp_y, lambda]``.
-
-        Parameters
-        ----------
-        gains : (4,) array
-            List of gains ``[k_x, k_y, k_z, k_omega]``.
-        """
-        k_x, k_y, k_z, k_omega = gains
-        self.K = array(
-            [
-                [k_x, 0.0, 0.0, 0.0],
-                [0.0, k_y, 0.0, 0.0],
-                [0.0, 0.0, k_z, k_omega],
-            ]
-        )
-
-    def set_critical_gains(self, k_z):
-        """Set critical gain `k_omega` for a desired vertical DCM gain `k_z`.
-
-        Args:
-            k_z: Desired vertical DCM to normalized leg stiffness gain.
-        """
-        assert k_z > 1e-10, "Feedback gain needs to be positive"
-        omega = self.ref_omega
-        k_xy = K_P / omega
-        gamma = omega * K_P
-        k_omega = omega + (k_z * self.ref_dcm[2] + gamma**2) / gamma
-        self.set_gains([k_xy, k_xy, k_z, k_omega])
-
-    def compute_compensation(self):
-        """Compute CoP and normalized leg stiffness compensation."""
-        omega = self.omega
-        com = self.pendulum.com.p
-        comd = self.pendulum.com.pd
-        dcm = comd + omega * com
-        Delta_omega = omega - self.ref_omega
-        Delta_x = array(
-            [
-                dcm[0] - self.ref_dcm[0],
-                dcm[1] - self.ref_dcm[1],
-                dcm[2] - self.ref_dcm[2],
-                Delta_omega,
-            ]
-        )
-        Delta_u = dot(self.K, Delta_x)
-        Delta_lambda = Delta_u[2]
-        Delta_r = Delta_u[:2]  # contact is horizontal for now
-        omegad = 2 * self.ref_omega * Delta_omega - Delta_lambda
-        self.omega += omegad * dt
-        self.dcm = com + comd / omega
-        return (Delta_r, Delta_lambda)
 
 
 class Pusher:
@@ -459,18 +93,18 @@ class Pusher:
 
 class Plotter:
 
-    def __init__(self, stabilizers):
+    def __init__(self, balancers):
         super(Plotter, self).__init__()
         self.plots = {
-            "omega": [[] for stab in stabilizers],
-            "xi_x": [[] for stab in stabilizers],
-            "xi_y": [[] for stab in stabilizers],
-            "xi_z": [[] for stab in stabilizers],
+            "omega": [[] for stab in balancers],
+            "xi_x": [[] for stab in balancers],
+            "xi_y": [[] for stab in balancers],
+            "xi_z": [[] for stab in balancers],
         }
-        self.stabilizers = stabilizers
+        self.balancers = balancers
 
     def on_tick(self, sim):
-        for i, stab in enumerate(self.stabilizers):
+        for i, stab in enumerate(self.balancers):
             cop = stab.pendulum.cop
             dcm = stab.dcm
             omega2 = stab.omega**2
@@ -491,9 +125,9 @@ class Plotter:
         plt.clf()
         linestyles = ["-", ":", "--"]
         colors = ["b", "g", "r"]
-        ref_omega = vrp_stabilizer.ref_omega
-        ref_lambda = vrp_stabilizer.ref_lambda
-        ref_dcm_p = vrp_stabilizer.ref_dcm
+        ref_omega = vrp_balancer.ref_omega
+        ref_lambda = vrp_balancer.ref_lambda
+        ref_dcm_p = vrp_balancer.ref_dcm
         refs = {
             "omega": [ref_omega**2, ref_lambda],
             "xi_x": [ref_dcm_p[0]],
@@ -502,7 +136,7 @@ class Plotter:
         }
         for figid, figname in enumerate(self.plots):
             plt.subplot(411 + figid)
-            for i, stab in enumerate(self.stabilizers):
+            for i, stab in enumerate(self.balancers):
                 curves = zip(*self.plots[figname][i][-size:])
                 trange = [dt * k for k in range(len(curves[0]))]
                 for j, curve in enumerate(curves):
@@ -556,41 +190,33 @@ if __name__ == "__main__":
     init_pos = np.array([0.0, 0.0, 0.8])
     init_vel = np.zeros(3)
     pendulums = []
-    stabilizers = []
+    balancers = []
+    kp = 3.0
 
-    pendulums.append(
-        InvertedPendulum(init_pos, init_vel, contact, color="b", size=0.019)
-    )
-    vhip_stabilizer = VHIPQPStabilizer(pendulums[-1])
-    stabilizers.append(vhip_stabilizer)
+    pendulums.append(InvertedPendulum(init_pos, init_vel, contact))
+    vhip_balancer = VHIPQPBalancer(pendulums[-1])
+    balancers.append(vhip_balancer)
 
-    pendulums.append(
-        InvertedPendulum(init_pos, init_vel, contact, color="g", size=0.02)
-    )
-    vrp_stabilizer = VRPStabilizer(pendulums[-1])
-    stabilizers.append(vrp_stabilizer)
+    pendulums.append(InvertedPendulum(init_pos, init_vel, contact))
+    vrp_balancer = VRPBalancer(pendulums[-1])
+    balancers.append(vrp_balancer)
 
-    if "--bonus" in sys.argv:
-        pendulums.append(
-            InvertedPendulum(
-                init_pos, init_vel, contact, color="r", size=0.015
-            )
-        )
-        bonus_stabilizer = BonusPolePlacementStabilizer(pendulums[-1], k_z=100)
-        stabilizers.append(bonus_stabilizer)
+    pendulums.append(InvertedPendulum(init_pos, init_vel, contact))
+    bonus_balancer = PolePlacementBalancer(pendulums[-1], k_z=100)
+    balancers.append(bonus_balancer)
 
     pusher = Pusher(pendulums)
-    plotter = Plotter(stabilizers)
+    plotter = Plotter(balancers)
 
     sim = []
-    for stabilizer, pendulum in zip(stabilizers, pendulums):
-        sim.append(stabilizer)  # before pendulum
+    for balancer, pendulum in zip(balancers, pendulums):
+        sim.append(balancer)  # before pendulum
         sim.append(pendulum)
     sim.append(plotter)  # before pusher
     sim.append(pusher)
 
     def reset():
-        for stab in stabilizers:
+        for stab in balancers:
             stab.reset_pendulum()
         sim.step()
 
@@ -610,7 +236,7 @@ Ready to go! You can access all state variables via this IPython shell.
 Here is the list of global objects. Use <TAB> to see what's inside.
 
     pendulums -- LIP and VHIP inverted pendulum states
-    stabilizers -- their respective balance feedback controllers
+    balancers -- their respective balance feedback controllers
     pusher -- applies external impulse to both pendulums at regular intervals
     plotter -- logs plot data
 

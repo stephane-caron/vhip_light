@@ -19,16 +19,17 @@ class InvertedPendulum:
         pos,
         vel,
         contact,
-        lambda_min=1e-5,
-        lambda_max=None,
+        mass: float,
+        lambda_min: float = 1e-5,
+        lambda_max: float = None,
         clamp=True,
-        size=0.02,
     ):
         super(InvertedPendulum, self).__init__()
         com = Point(pos, vel)
         self.clamp = clamp
         self.com = com
         self.contact = contact
+        self.mass = mass
         self.cop = contact.p
         self.lambda_ = -GRAVITY[2] / (com.z - contact.z)
         self.lambda_max = lambda_max
