@@ -6,8 +6,10 @@
 
 from .contact import Contact
 from .inverted_pendulum import InvertedPendulum
+from .plotter import Plotter
 from .point import Point
 from .pole_placement_balancer import PolePlacementBalancer
+from .process import Process
 from .vhip_balancer import VHIPBalancer
 from .vhip_qp_balancer import VHIPQPBalancer
 from .vrp_balancer import VRPBalancer
@@ -15,8 +17,10 @@ from .vrp_balancer import VRPBalancer
 __all__ = [
     "Contact",
     "InvertedPendulum",
+    "Plotter",
     "Point",
     "PolePlacementBalancer",
+    "Process",
     "VHIPBalancer",
     "VHIPQPBalancer",
     "VRPBalancer",

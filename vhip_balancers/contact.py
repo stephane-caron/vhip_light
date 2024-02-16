@@ -4,7 +4,6 @@
 # SPDX-License-Identifier: GPL-3.0
 # Copyright 2024 Inria
 
-
 from dataclasses import dataclass
 from typing import Tuple
 

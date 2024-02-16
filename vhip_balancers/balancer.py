@@ -7,9 +7,10 @@
 import numpy as np
 
 from .gravity import GRAVITY
+from .process import Process
 
 
-class Balancer:
+class Balancer(Process):
     """Base class for balancers.
 
     Attributes:
@@ -25,6 +26,7 @@ class Balancer:
     """
 
     def __init__(self, pendulum, ref_offset=None):
+        super().__init__()
         if ref_offset is None:
             ref_offset = np.array([0.0, 0.0, 0.0])  # [m]
         ref_com = pendulum.com.p + ref_offset

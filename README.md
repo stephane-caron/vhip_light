@@ -18,3 +18,7 @@ If you don't have all dependencies, you can get them all at once using Conda:
 conda create -f environment.yaml
 conda activate vhip_balancers
 ```
+
+## See also
+
+- [VHIP walking controller](https://github.com/stephane-caron/vhip_walking_controller): C++ version of the VHIP QP balancer that was validated on the HRP-4 humanoid robot.
