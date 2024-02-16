@@ -1,4 +1,4 @@
-name: vhip_stabilizer
+name: vhip_light
 channels:
     - https://conda.anaconda.org/conda-forge
 dependencies:

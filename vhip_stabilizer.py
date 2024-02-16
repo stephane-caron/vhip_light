@@ -1,19 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2020 Stephane Caron <stephane.caron@normalesup.org>
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2016-2019 CNRS-UM LIRMM
 # Copyright 2024 Inria
 
-"""
-This example compares two stabilizers for the inverted pendulum model. The
+"""This example compares two stabilizers for the inverted pendulum model. The
 first one (baseline) is based on proportional feedback of the 3D DCM
 [Englsberger15]_. The second one (proposed) performs proportional feedback of a
 4D DCM of the same model [Caron20]_.
 """
 
 import sys
-from dataclasses import dataclass
 from warnings import warn
 
 import IPython
@@ -23,12 +21,13 @@ import numpy as np
 import scipy.signal
 from numpy.typing import NDArray
 
+from vhip_light import Point
+
 try:
     import cvxpy
 except ImportError:
     raise ImportError("This example requires CVXPY, install it e.g. via pip")
 
-import pymanoid
 from numpy import array, dot, eye, hstack, sqrt, vstack, zeros
 from qpsolvers import solve_qp
 
@@ -47,10 +46,8 @@ K_P = 3.0  # proportional DCM feedback gain
 assert K_P > 1.0, "DCM feedback gain needs to be greater than one"
 
 
-@dataclass
-class Point:
-    p: NDArray[float]
-    pd: NDArray[float]
+class Contact:
+    pass
 
 
 class InvertedPendulum:
@@ -78,16 +75,12 @@ class InvertedPendulum:
         self.lambda_min = lambda_min
 
     def set_cop(self, cop, clamp=None):
-        """
-        Update the CoP location on the contact surface.
+        """Update the CoP location on the contact surface.
 
-        Parameters
-        ----------
-        cop : (3,) array
-            New CoP location in the world frame.
-        clamp : bool, optional
-            Clamp CoP within the contact area if it lies outside. Overrides
-            ``self.clamp``.
+        Args:
+            cop: New CoP location in the world frame.
+            clamp: Clamp CoP within the contact area if it lies outside.
+                Overrides ``self.clamp``.
         """
         if self.clamp if clamp is None else clamp:
             cop_local = dot(self.contact.R.T, cop - self.contact.p)
@@ -111,8 +104,7 @@ class InvertedPendulum:
         self.cop = cop
 
     def set_lambda(self, lambda_, clamp=None):
-        """
-        Update the leg stiffness coefficient.
+        """Update the leg stiffness coefficient.
 
         Parameters
         ----------
@@ -135,8 +127,7 @@ class InvertedPendulum:
         self.lambda_ = lambda_
 
     def integrate(self, duration):
-        """
-        Integrate dynamics forward for a given duration.
+        """Integrate dynamics forward for a given duration.
 
         Parameters
         ----------
@@ -157,35 +148,19 @@ class InvertedPendulum:
         self.integrate(dt)
 
 
-class Stabilizer(pymanoid.Process):
-    """
-    Base class for stabilizer processes.
+class Stabilizer:
+    """Base class for stabilizer processes.
 
-    Parameters
-    ----------
-    pendulum : pymanoid.models.InvertedPendulum
-        Inverted pendulum to stabilize.
-
-    Attributes
-    ----------
-    contact : pymanoid.Contact
-        Contact frame and area dimensions.
-    dcm : (3,) array
-        Position of the DCM in the world frame.
-    omega : scalar
-        Instantaneous natural frequency of the pendulum.
-    pendulum : pymanoid.InvertedPendulum
-        Measured state of the reduced model.
-    ref_com : (3,) array
-        Desired center of mass (CoM) position.
-    ref_comd : (3,) array
-        Desired CoM velocity.
-    ref_cop : (3,) array
-        Desired center of pressure (CoP).
-    ref_lambda : scalar
-        Desired normalized leg stiffness.
-    ref_omega : scalar
-        Desired natural frequency.
+    Attributes:
+        contact: Contact frame and area dimensions.
+        dcm: Position of the DCM in the world frame.
+        omega: Instantaneous natural frequency of the pendulum.
+        pendulum: Measured state of the reduced model.
+        ref_com: Desired center of mass (CoM) position.
+        ref_comd: Desired CoM velocity.
+        ref_cop: Desired center of pressure (CoP).
+        ref_lambda: Desired normalized leg stiffness.
+        ref_omega: Desired natural frequency.
     """
 
     def __init__(self, pendulum):
@@ -207,9 +182,7 @@ class Stabilizer(pymanoid.Process):
         self.ref_omega = omega
 
     def reset_pendulum(self):
-        """
-        Reset inverted pendulum to its reference state.
-        """
+        """Reset inverted pendulum to its reference state."""
         self.omega = self.ref_omega
         self.pendulum.com.set_pos(self.ref_com)
         self.pendulum.com.set_vel(self.ref_comd)
@@ -217,8 +190,7 @@ class Stabilizer(pymanoid.Process):
         self.pendulum.set_lambda(self.ref_lambda)
 
     def on_tick(self, sim):
-        """
-        Set inverted pendulum CoP and stiffness inputs.
+        """Set inverted pendulum CoP and stiffness inputs.
 
         Parameters
         ----------
@@ -233,8 +205,7 @@ class Stabilizer(pymanoid.Process):
 
 
 class VRPStabilizer(Stabilizer):
-    """
-    Inverted pendulum stabilizer based on proportional feedback of the
+    """Inverted pendulum stabilizer based on proportional feedback of the
     3D divergent component of motion (DCM) applied to the virtual repellent
     point (VRP).
 
@@ -243,14 +214,14 @@ class VRPStabilizer(Stabilizer):
     pendulum : pymanoid.models.InvertedPendulum
         Inverted pendulum to stabilize.
 
-    Attributes
+    Attributes:
     ----------
     ref_dcm : (3,) array
         Desired (3D) divergent component of motion.
     ref_vrp : (3,) array
         Desired virtual repellent point (VRP).
 
-    Notes
+    Notes:
     -----
     See "Three-Dimensional Bipedal Walking Control Based on Divergent Component
     of Motion" (Englsberger et al., IEEE Transactions on Robotics) for details.
@@ -262,9 +233,7 @@ class VRPStabilizer(Stabilizer):
         self.ref_vrp = self.ref_com
 
     def compute_compensation(self):
-        """
-        Compute CoP and normalized leg stiffness compensation.
-        """
+        """Compute CoP and normalized leg stiffness compensation."""
         omega = self.omega
         com = self.pendulum.com.p
         comd = self.pendulum.com.pd
@@ -283,24 +252,21 @@ class VRPStabilizer(Stabilizer):
 
 
 class VHIPStabilizer(Stabilizer):
-    """
-    Stabilizer based on proportional feedback of the 4D divergent component of
-    motion of the variable-height inverted pendulum (VHIP).
+    """Proportional feedback of the 4D DCM of the VHIP.
 
     Parameters
-    ----------
-    pendulum : pymanoid.models.InvertedPendulum
-        Inverted pendulum to stabilize.
+        pendulum: Inverted pendulum to stabilize.
 
-    Notes
-    -----
-    This implementation uses CVXPY <https://www.cvxpy.org/>. Using this
-    modeling language here allowed us to try various formulations of the
-    controller before converging on this one. We can only praise the agility of
-    this approach, as opposed to e.g. writing QP matrices directly.
+    Notes:
+        This implementation uses CVXPY <https://www.cvxpy.org/>. Using this
+        modeling language here allowed us to try various formulations of the
+        controller before converging on this one. We can only praise the
+        agility of this approach, as opposed to e.g. writing QP matrices
+        directly.
 
-    See "Biped Stabilization by Linear Feedback of the Variable-Height Inverted
-    Pendulum Model" (Caron, 2019) for detail on the controller itself.
+        See "Biped Stabilization by Linear Feedback of the Variable-Height
+        Inverted Pendulum Model" (Caron, 2019) for detail on the controller
+        itself.
     """
 
     def __init__(self, pendulum):
@@ -312,9 +278,7 @@ class VHIPStabilizer(Stabilizer):
         self.ref_vrp = self.ref_com
 
     def compute_compensation(self):
-        """
-        Compute CoP and normalized leg stiffness compensation.
-        """
+        """Compute CoP and normalized leg stiffness compensation."""
         # Measurements
         Delta_com = self.pendulum.com.p - self.ref_com
         Delta_comd = self.pendulum.com.pd - self.ref_comd
@@ -359,7 +323,7 @@ class VHIPStabilizer(Stabilizer):
         ) / omega_d
 
         # Kinematic DCM height constraint
-        xi_z = self.ref_dcm[2] + Delta_xi[2] + 1.5 * sim.dt * Delta_xid[2]
+        xi_z = self.ref_dcm[2] + Delta_xi[2] + 1.5 * dt * Delta_xid[2]
 
         # Cost function
         costs = []
@@ -396,28 +360,22 @@ class VHIPStabilizer(Stabilizer):
 
 
 class VHIPQPStabilizer(VHIPStabilizer):
-    """
-    Stabilizer based on proportional feedback of the 4D divergent component of
-    motion of the variable-height inverted pendulum (VHIP).
+    """Proportional feedback of the 4D DCM of the VHIP.
 
-    Parameters
-    ----------
-    pendulum : pymanoid.models.InvertedPendulum
-        Inverted pendulum to stabilize.
+    Args:
+        pendulum: Inverted pendulum to stabilize.
 
-    Notes
-    -----
-    This implementation transcripts QP matrices from :class:`VHIPStabilizer`.
-    We checked that the two produce the same outputs before switching to C++ in
-    <https://github.com/stephane-caron/vhip_walking_controller/>. (This step
-    would not have been necessary if we had a modeling language for convex
-    optimization directly in C++.)
+    Notes:
+        This implementation transcripts QP matrices from
+        :class:`VHIPStabilizer`. We checked that the two produce the same
+        outputs before switching to C++ in
+        <https://github.com/stephane-caron/vhip_walking_controller/>. (This
+        step would not have been necessary if we had a modeling language for
+        convex optimization directly in C++.)
     """
 
     def compute_compensation(self):
-        """
-        Compute CoP and normalized leg stiffness compensation.
-        """
+        """Compute CoP and normalized leg stiffness compensation."""
         Delta_com = self.pendulum.com.p - self.ref_com
         Delta_comd = self.pendulum.com.pd - self.ref_comd
         measured_comd = self.pendulum.com.pd
@@ -499,7 +457,7 @@ class VHIPQPStabilizer(VHIPStabilizer):
         )
         h_omega = array([omega_max - omega_d, omega_d - omega_min])
 
-        g_sigma = 1.5 * lambda_d * sim.dt / omega_d
+        g_sigma = 1.5 * lambda_d * dt / omega_d
         g_xi = 1 + g_sigma * (1 - K_P)
         G_xi_next = array(
             [
@@ -530,39 +488,36 @@ class VHIPQPStabilizer(VHIPStabilizer):
 
 
 class BonusPolePlacementStabilizer(Stabilizer):
-    """
-    This is a "bonus" stabilizer, not reported in the paper, that was an
+    """This is a "bonus" stabilizer, not reported in the paper, that was an
     intermediate step in our derivation of the VHIPQPStabilizer.
 
-    Parameters
-    ----------
-    pendulum : pymanoid.models.InvertedPendulum
-        Inverted pendulum to stabilize.
-    k_z : scalar
-        Feedback gain between DCM altitude and normalized leg stiffness input.
+    Args:
+        pendulum: Inverted pendulum to stabilize.
+        k_z: Feedback gain between DCM altitude and normalized leg stiffness
+            input.
 
-    Notes
-    -----
-    This stabilizer also performs pole placement on a 4D DCM (using a velocity
-    rather than position DCM though), but contrary to VHIPQPStabilizer it
-    doesn't force the closed-loop matrix to be diagonal. We started out
-    exploring this stabilizer first.
+    Notes:
+        This stabilizer also performs pole placement on a 4D DCM (using a
+        velocity rather than position DCM though), but contrary to
+        VHIPQPStabilizer it doesn't force the closed-loop matrix to be
+        diagonal. We started out exploring this stabilizer first.
 
-    The first thing to observe by direct pole placement is that the gain matrix
-    has essentially four non-zero gains in general. You can try out the
-    :func:`set_poles` function to verify this.
+        The first thing to observe by direct pole placement is that the gain
+        matrix has essentially four non-zero gains in general. You can try out
+        the :func:`set_poles` function to verify this.
 
-    The closed-loop system with four gains has structure: in the horizontal
-    plane it is equivalent to the VRPStabilizer, and the normalized leg
-    stiffness lambda depends on both the vertical DCM and the natural frequency
-    omega. We observed that this system performs identically to the previous
-    one in the horizontal plane, and always worse than the previous one
-    vertically.
+        The closed-loop system with four gains has structure: in the horizontal
+        plane it is equivalent to the VRPStabilizer, and the normalized leg
+        stiffness lambda depends on both the vertical DCM and the natural
+        frequency omega. We observed that this system performs identically to
+        the previous one in the horizontal plane, and always worse than the
+        previous one vertically.
 
-    However, raising the k_z (vertical DCM to lambda) gain to large values, we
-    noticed that the vertical tracking of this stabilizer converged to that of
-    the VRPStabilizer. In the limit where k_z goes to infinity, the system
-    slides on the constraint given by Equation (21) in the paper. This is how
+        However, raising the k_z (vertical DCM to lambda) gain to large values,
+        we noticed that the vertical tracking of this stabilizer converged to
+        that of the VRPStabilizer. In the limit where k_z goes to infinity, the
+        system slides on the constraint given by Equation (21) in the paper.
+        This is how
     we came to the derivation of the VHIPQPStabilizer.
     """
 
@@ -594,21 +549,17 @@ class BonusPolePlacementStabilizer(Stabilizer):
         #
         self.set_critical_gains(k_z)
 
-    def set_poles(self, poles):
-        """
-        Place poles using SciPy's implementation of Kautsky et al.'s algorithm.
+    def set_poles(self, poles: NDArray[float]):
+        """Place poles using SciPy's implementation of Kautsky et al.
 
-        Parameters
-        ----------
-        poles : (4,) array
-            Desired poles of the closed-loop system.
+        Args:
+            poles: Desired poles of the closed-loop system.
         """
         bunch = scipy.signal.place_poles(self.A, self.B, poles)
         self.K = -bunch.gain_matrix  # place_poles assumes A - B * K
 
     def set_gains(self, gains):
-        """
-        Set gains from 4D DCM error to 3D input ``[zmp_x, zmp_y, lambda]``.
+        """Set gains from 4D DCM error to 3D input ``[zmp_x, zmp_y, lambda]``.
 
         Parameters
         ----------
@@ -625,13 +576,10 @@ class BonusPolePlacementStabilizer(Stabilizer):
         )
 
     def set_critical_gains(self, k_z):
-        """
-        Set critical gain ``k_omega`` for a desired vertical DCM gain ``k_z``.
+        """Set critical gain `k_omega` for a desired vertical DCM gain `k_z`.
 
-        Parameters
-        ----------
-        k_z : scalar
-            Desired vertical DCM to normalized leg stiffness gain.
+        Args:
+            k_z: Desired vertical DCM to normalized leg stiffness gain.
         """
         assert k_z > 1e-10, "Feedback gain needs to be positive"
         omega = self.ref_omega
@@ -641,9 +589,7 @@ class BonusPolePlacementStabilizer(Stabilizer):
         self.set_gains([k_xy, k_xy, k_z, k_omega])
 
     def compute_compensation(self):
-        """
-        Compute CoP and normalized leg stiffness compensation.
-        """
+        """Compute CoP and normalized leg stiffness compensation."""
         omega = self.omega
         com = self.pendulum.com.p
         comd = self.pendulum.com.pd
@@ -661,26 +607,22 @@ class BonusPolePlacementStabilizer(Stabilizer):
         Delta_lambda = Delta_u[2]
         Delta_r = Delta_u[:2]  # contact is horizontal for now
         omegad = 2 * self.ref_omega * Delta_omega - Delta_lambda
-        self.omega += omegad * sim.dt
+        self.omega += omegad * dt
         self.dcm = com + comd / omega
         return (Delta_r, Delta_lambda)
 
 
-class Pusher(pymanoid.Process):
-    """
-    Send impulses to the inverted pendulum every once in a while.
+class Pusher:
+    """Send impulses to the inverted pendulum every once in a while.
 
-    Parameters
-    ----------
-    pendulums : list of pymanoid.models.InvertedPendulum
-        Inverted pendulums to de-stabilize.
-    gain : scalar
-        Magnitude of velocity jumps.
+    Args:
+        pendulums: Inverted pendulums to de-stabilize.
+        gain: Magnitude of velocity jumps.
 
-    Notes
-    -----
-    You know, I've seen a lot of people walkin' 'round // With tombstones in
-    their eyes // But the pusher don't care // Ah, if you live or if you die
+    Notes:
+        You know, I've seen a lot of people walkin' 'round // With tombstones
+        in their eyes // But the pusher don't care // Ah, if you live or if you
+        die
     """
 
     def __init__(self, pendulums, gain=0.1):
@@ -698,8 +640,7 @@ class Pusher(pymanoid.Process):
         self.started = False
 
     def on_tick(self, dt):
-        """
-        Apply regular impulses to the inverted pendulum.
+        """Apply regular impulses to the inverted pendulum.
 
         Args:
             dt: Time step.
@@ -723,7 +664,7 @@ class Pusher(pymanoid.Process):
             pendulum.com.set_vel(comd + dv)
 
 
-class Plotter(pymanoid.Process):
+class Plotter:
 
     def __init__(self, stabilizers):
         super(Plotter, self).__init__()
@@ -770,7 +711,7 @@ class Plotter(pymanoid.Process):
             plt.subplot(411 + figid)
             for i, stab in enumerate(self.stabilizers):
                 curves = zip(*self.plots[figname][i][-size:])
-                trange = [sim.dt * k for k in range(len(curves[0]))]
+                trange = [dt * k for k in range(len(curves[0]))]
                 for j, curve in enumerate(curves):
                     plt.plot(
                         trange, curve, linestyle=linestyles[i], color=colors[j]
@@ -793,61 +734,52 @@ class Plotter(pymanoid.Process):
             plt.grid(True)
 
 
-def push_three_times():
-    """
-    Apply three pushes of increasing magnitude to the CoM.
+def step(n_steps: int) -> None:
+    for process in sim:
+        process.step(dt)
 
-    Note
+
+def push_three_times():
+    """Apply three pushes of increasing magnitude to the CoM.
+
+    Note:
     ----
     This is the function used to generate Fig. 1 in the manuscript
     <https://hal.archives-ouvertes.fr/hal-02289919v1/document>.
     """
-    sim.step(10)
+    step(10)
     pusher.push([0.0, 0.08, 0.0])
-    sim.step(40)
+    step(40)
     pusher.push([0.0, 0.12, 0.0])
-    sim.step(50)
+    step(50)
     pusher.push([0.0, 0.18, 0.0])
-    sim.step(100)
+    step(100)
 
 
 if __name__ == "__main__":
-    sim = pymanoid.Simulation(dt=0.03)
-    sim.set_viewer()
-    sim.viewer.SetCamera(
-        [
-            [-0.28985337, 0.40434395, -0.86746239, 1.40434551],
-            [0.95680245, 0.1009506, -0.27265003, 0.45636871],
-            [-0.02267354, -0.90901867, -0.41613816, 1.15192068],
-            [0.0, 0.0, 0.0, 1.0],
-        ]
-    )
+    dt = 0.03  # [s]
 
-    contact = pymanoid.Contact((0.1, 0.05), pos=[0.0, 0.0, 0.0])
+    contact = Contact((0.1, 0.05), pos=[0.0, 0.0, 0.0])
     init_pos = np.array([0.0, 0.0, 0.8])
     init_vel = np.zeros(3)
     pendulums = []
     stabilizers = []
 
     pendulums.append(
-        pymanoid.models.InvertedPendulum(
-            init_pos, init_vel, contact, color="b", size=0.019
-        )
+        InvertedPendulum(init_pos, init_vel, contact, color="b", size=0.019)
     )
     vhip_stabilizer = VHIPQPStabilizer(pendulums[-1])
     stabilizers.append(vhip_stabilizer)
 
     pendulums.append(
-        pymanoid.models.InvertedPendulum(
-            init_pos, init_vel, contact, color="g", size=0.02
-        )
+        InvertedPendulum(init_pos, init_vel, contact, color="g", size=0.02)
     )
     vrp_stabilizer = VRPStabilizer(pendulums[-1])
     stabilizers.append(vrp_stabilizer)
 
     if "--bonus" in sys.argv:
         pendulums.append(
-            pymanoid.models.InvertedPendulum(
+            InvertedPendulum(
                 init_pos, init_vel, contact, color="r", size=0.015
             )
         )
@@ -857,11 +789,12 @@ if __name__ == "__main__":
     pusher = Pusher(pendulums)
     plotter = Plotter(stabilizers)
 
+    sim = []
     for stabilizer, pendulum in zip(stabilizers, pendulums):
-        sim.schedule(stabilizer)  # before pendulum
-        sim.schedule(pendulum)
-    sim.schedule_extra(plotter)  # before pusher
-    sim.schedule_extra(pusher)
+        sim.append(stabilizer)  # before pendulum
+        sim.append(pendulum)
+    sim.append(plotter)  # before pusher
+    sim.append(pusher)
 
     def reset():
         for stab in stabilizers:
