@@ -7,7 +7,7 @@ Python prototyping code for [Biped Stabilization by Linear Feedback of the Varia
 If you already have CVXPY, you can run this script directly:
 
 ```console
-python vhip_light.py
+python main.py
 ```
 
 ## Installation
@@ -16,5 +16,5 @@ If you don't have all dependencies, you can get them all at once using Conda:
 
 ```
 conda create -f environment.yaml
-conda activate vhip_light
+conda activate vhip_balancers
 ```

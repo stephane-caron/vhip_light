@@ -1,4 +1,4 @@
-name: vhip_light
+name: vhip_balancers
 channels:
     - https://conda.anaconda.org/conda-forge
 dependencies:

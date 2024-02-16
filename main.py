@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-3.0
 # Copyright 2016-2019 CNRS-UM LIRMM
 # Copyright 2024 Inria
 
@@ -21,7 +21,7 @@ import numpy as np
 import scipy.signal
 from numpy.typing import NDArray
 
-from vhip_light import Point
+from vhip_balancers import InvertedPendulum, Point
 
 try:
     import cvxpy
@@ -31,7 +31,6 @@ except ImportError:
 from numpy import array, dot, eye, hstack, sqrt, vstack, zeros
 from qpsolvers import solve_qp
 
-GRAVITY = [0.0, 0.0, -9.81]  # [m] / [s]^(-2)
 MASS = 38.0  # [kg]
 
 MAX_DCM_HEIGHT = 1.0  # [m]
@@ -40,215 +39,9 @@ MIN_DCM_HEIGHT = 0.5  # [m]
 MAX_FORCE = 1000.0  # [N]
 MIN_FORCE = 1.0  # [N]
 
-REF_OFFSET = array([0.0, 0.0, 0.0])  # [m]
 K_P = 3.0  # proportional DCM feedback gain
 
 assert K_P > 1.0, "DCM feedback gain needs to be greater than one"
-
-
-class Contact:
-    pass
-
-
-class InvertedPendulum:
-
-    def __init__(
-        self,
-        pos,
-        vel,
-        contact,
-        lambda_min=1e-5,
-        lambda_max=None,
-        clamp=True,
-        color="b",
-        size=0.02,
-    ):
-        super(InvertedPendulum, self).__init__()
-        com = Point(pos, vel)
-        self.clamp = clamp
-        self.color = color
-        self.com = com
-        self.contact = contact
-        self.cop = contact.p
-        self.lambda_ = -GRAVITY[2] / (com.z - contact.z)
-        self.lambda_max = lambda_max
-        self.lambda_min = lambda_min
-
-    def set_cop(self, cop, clamp=None):
-        """Update the CoP location on the contact surface.
-
-        Args:
-            cop: New CoP location in the world frame.
-            clamp: Clamp CoP within the contact area if it lies outside.
-                Overrides ``self.clamp``.
-        """
-        if self.clamp if clamp is None else clamp:
-            cop_local = dot(self.contact.R.T, cop - self.contact.p)
-            if cop_local[0] >= self.contact.shape[0]:
-                cop_local[0] = self.contact.shape[0] - 1e-5
-            elif cop_local[0] <= -self.contact.shape[0]:
-                cop_local[0] = -self.contact.shape[0] + 1e-5
-            if cop_local[1] >= self.contact.shape[1]:
-                cop_local[1] = self.contact.shape[1] - 1e-5
-            elif cop_local[1] <= -self.contact.shape[1]:
-                cop_local[1] = -self.contact.shape[1] + 1e-5
-            cop = self.contact.p + dot(self.contact.R, cop_local)
-        elif __debug__:
-            cop_check = dot(self.contact.R.T, cop - self.contact.p)
-            if abs(cop_check[0]) > 1.05 * self.contact.shape[0]:
-                warn("CoP crosses contact area along sagittal axis")
-            if abs(cop_check[1]) > 1.05 * self.contact.shape[1]:
-                warn("CoP crosses contact area along lateral axis")
-            if abs(cop_check[2]) > 0.01:
-                warn("CoP does not lie on contact area")
-        self.cop = cop
-
-    def set_lambda(self, lambda_, clamp=None):
-        """Update the leg stiffness coefficient.
-
-        Parameters
-        ----------
-        lambda_ : scalar
-            Leg stiffness coefficient (positive).
-        clamp : bool, optional
-            Clamp value if it exits the [lambda_min, lambda_max] interval.
-            Overrides ``self.clamp``.
-        """
-        if self.clamp if clamp is None else clamp:
-            if self.lambda_min is not None and lambda_ < self.lambda_min:
-                lambda_ = self.lambda_min
-            if self.lambda_max is not None and lambda_ > self.lambda_max:
-                lambda_ = self.lambda_max
-        elif __debug__:
-            if self.lambda_min is not None and lambda_ < self.lambda_min:
-                warn("Stiffness %f below %f" % (lambda_, self.lambda_min))
-            if self.lambda_max is not None and lambda_ > self.lambda_max:
-                warn("Stiffness %f above %f" % (lambda_, self.lambda_max))
-        self.lambda_ = lambda_
-
-    def integrate(self, duration):
-        """Integrate dynamics forward for a given duration.
-
-        Parameters
-        ----------
-        duration : scalar
-            Duration of forward integration.
-        """
-        omega = sqrt(self.lambda_)
-        p0 = self.com.p
-        pd0 = self.com.pd
-        ch, sh = np.cosh(omega * duration), np.sinh(omega * duration)
-        vrp = self.cop - GRAVITY / self.lambda_
-        p = p0 * ch + pd0 * sh / omega - vrp * (ch - 1.0)
-        pd = pd0 * ch + omega * (p0 - vrp) * sh
-        self.com.set_pos(p)
-        self.com.set_vel(pd)
-
-    def step(self, dt: float):
-        self.integrate(dt)
-
-
-class Stabilizer:
-    """Base class for stabilizer processes.
-
-    Attributes:
-        contact: Contact frame and area dimensions.
-        dcm: Position of the DCM in the world frame.
-        omega: Instantaneous natural frequency of the pendulum.
-        pendulum: Measured state of the reduced model.
-        ref_com: Desired center of mass (CoM) position.
-        ref_comd: Desired CoM velocity.
-        ref_cop: Desired center of pressure (CoP).
-        ref_lambda: Desired normalized leg stiffness.
-        ref_omega: Desired natural frequency.
-    """
-
-    def __init__(self, pendulum):
-        super(Stabilizer, self).__init__()
-        ref_com = pendulum.com.p + REF_OFFSET
-        n = pendulum.contact.normal
-        lambda_ = -dot(n, GRAVITY) / dot(n, ref_com - pendulum.contact.p)
-        omega = sqrt(lambda_)
-        ref_cop = ref_com + GRAVITY / lambda_
-        assert abs(lambda_ - pendulum.lambda_) < 1e-5
-        self.contact = pendulum.contact
-        self.dcm = ref_com
-        self.omega = omega
-        self.pendulum = pendulum
-        self.ref_com = ref_com
-        self.ref_comd = np.zeros(3)
-        self.ref_cop = ref_cop
-        self.ref_lambda = lambda_
-        self.ref_omega = omega
-
-    def reset_pendulum(self):
-        """Reset inverted pendulum to its reference state."""
-        self.omega = self.ref_omega
-        self.pendulum.com.set_pos(self.ref_com)
-        self.pendulum.com.set_vel(self.ref_comd)
-        self.pendulum.set_cop(self.ref_cop)
-        self.pendulum.set_lambda(self.ref_lambda)
-
-    def on_tick(self, sim):
-        """Set inverted pendulum CoP and stiffness inputs.
-
-        Parameters
-        ----------
-        sim : pymanoid.Simulation
-            Simulation instance.
-        """
-        Delta_r, Delta_lambda = self.compute_compensation()
-        cop = self.ref_cop + dot(self.contact.R[:3, :2], Delta_r)
-        lambda_ = self.ref_lambda + Delta_lambda
-        self.pendulum.set_cop(cop)
-        self.pendulum.set_lambda(lambda_)
-
-
-class VRPStabilizer(Stabilizer):
-    """Inverted pendulum stabilizer based on proportional feedback of the
-    3D divergent component of motion (DCM) applied to the virtual repellent
-    point (VRP).
-
-    Parameters
-    ----------
-    pendulum : pymanoid.models.InvertedPendulum
-        Inverted pendulum to stabilize.
-
-    Attributes:
-    ----------
-    ref_dcm : (3,) array
-        Desired (3D) divergent component of motion.
-    ref_vrp : (3,) array
-        Desired virtual repellent point (VRP).
-
-    Notes:
-    -----
-    See "Three-Dimensional Bipedal Walking Control Based on Divergent Component
-    of Motion" (Englsberger et al., IEEE Transactions on Robotics) for details.
-    """
-
-    def __init__(self, pendulum):
-        super(VRPStabilizer, self).__init__(pendulum)
-        self.ref_dcm = self.ref_com
-        self.ref_vrp = self.ref_com
-
-    def compute_compensation(self):
-        """Compute CoP and normalized leg stiffness compensation."""
-        omega = self.omega
-        com = self.pendulum.com.p
-        comd = self.pendulum.com.pd
-        dcm = com + comd / omega
-        Delta_dcm = dcm - self.ref_dcm
-        vrp = self.ref_vrp + K_P * Delta_dcm
-        n = self.pendulum.contact.n
-        gravito_inertial_force = omega**2 * (com - vrp) - GRAVITY
-        displacement = com - self.pendulum.contact.p
-        lambda_ = dot(n, gravito_inertial_force) / dot(n, displacement)
-        cop = com - gravito_inertial_force / lambda_
-        Delta_r = dot(self.contact.R.T, cop - self.ref_cop)[:2]
-        Delta_lambda = lambda_ - self.ref_lambda
-        self.dcm = dcm
-        return (Delta_r, Delta_lambda)
 
 
 class VHIPStabilizer(Stabilizer):
