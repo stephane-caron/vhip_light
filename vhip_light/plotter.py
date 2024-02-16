@@ -76,7 +76,7 @@ class Plotter(Process):
                 plt.plot([trange[0], trange[-1]], [r_y_max] * 2, "m:", lw=2)
                 plt.plot([trange[0], trange[-1]], [r_y_min] * 2, "m:", lw=2)
                 plt.ylim(r_y_min - 0.01, r_y_max + 0.01)
-            plt.legend(legends[figname])
+            plt.legend(legends[figname], loc="upper right")
             plt.grid(True)
 
     def step(self, dt: float) -> None:
