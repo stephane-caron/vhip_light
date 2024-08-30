@@ -35,6 +35,7 @@ dependencies = [
 keywords = ["inverse", "kinematics", "pinocchio"]
 
 [project.urls]
+Homepage = "https://github.com/stephane-caron/vhip_light"
 Documentation = "https://stephane-caron.github.io/vhip_light/"
 Source = "https://github.com/stephane-caron/vhip_light"
 Tracker = "https://github.com/stephane-caron/vhip_light/issues"
