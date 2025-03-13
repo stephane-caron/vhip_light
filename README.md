@@ -47,5 +47,5 @@ If you find this code or the paper useful, please consider citing it:
 
 ## See also
 
-- [vhip\_stabilization.py](https://github.com/stephane-caron/pymanoid/blob/2cbce7441f377a18119837dfeee51662654c6ce7/examples/vhip_stabilization.py): original Python prototype as a single script, with dependencies on OpenRAVE and pymanoid (now deprectated).
+- [VHIP stabilization script](https://github.com/stephane-caron/pymanoid/blob/2cbce7441f377a18119837dfeee51662654c6ce7/examples/vhip_stabilization.py): original Python prototype as a single script, with dependencies on OpenRAVE and pymanoid (now deprectated).
 - [VHIP walking controller](https://github.com/stephane-caron/vhip_walking_controller): C++ version of the VHIP QP balancer that was validated on the HRP-4 humanoid robot.
