@@ -29,6 +29,22 @@ pip install cvxpy ipython matplotlib qpsolvers scipy
 python main.py
 ```
 
+## Citation
+
+If you find this code or the paper useful, please consider citing it:
+
+```bibtex
+@inproceedings{caron2020icra,
+  title = {Biped Stabilization by Linear Feedback of the Variable-Height Inverted Pendulum Model},
+  author = {Caron, St{\'e}phane},
+  booktitle = {IEEE International Conference on Robotics and Automation},
+  url = {https://hal.archives-ouvertes.fr/hal-02289919},
+  year = {2020},
+  month = may,
+  doi = {10.1109/ICRA40945.2020.9196715},
+}
+```
+
 ## See also
 
 - [vhip\_stabilization.py](https://github.com/stephane-caron/pymanoid/blob/2cbce7441f377a18119837dfeee51662654c6ce7/examples/vhip_stabilization.py): original Python prototype as a single script, with dependencies on OpenRAVE and pymanoid (now deprectated).
